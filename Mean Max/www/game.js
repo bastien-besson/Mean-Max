@@ -80,7 +80,7 @@ GAME.Unit = function (inputs) {
     this.destination = new Vector(parseFloat(inputs[5]), parseFloat(inputs[6]));
     this.target = new Vector();
     this.collision = [];
-    this.throttle = 150;
+    this.throttle = 300;
     this.angle = 0;
     this.water = 0;
 
@@ -137,8 +137,8 @@ GAME.Unit.prototype = {
 
     move: function (time) {
         // Calculate new position
-        this.position.x += Math.round(this.speed.x * time);
-        this.position.y += Math.round(this.speed.y * time);
+        this.position.x = Math.round(this.position.x + this.speed.x * time);
+        this.position.y = Math.round(this.position.y + this.speed.y * time);
     },
 
     adjust: function () {
@@ -233,11 +233,11 @@ GAME.Unit.prototype = {
 
         if (unit && diff <= 0) {
             // Unit overlapping. Fix positions.
-            this.moveTo(unit.position, diff);
-            unit.moveTo(this.position, diff);
+            this.moveTo(unit.position, diff - 0.001);
+            unit.moveTo(this.position, diff - 0.001);
         }
         else if (!unit && diff >= 0) {
-            this.moveTo(new Vector(), diff);
+            this.moveTo(new Vector(), diff + 0.001);
         }
     },
 
@@ -444,23 +444,33 @@ GAME.main = (function () {
                     (collision.unitA ? collision.unitA.name() : 'None') + ' ' +
                     (collision.unitB ? collision.unitB.name() : 'Map'));
 
+                printErr('Before Movement =>');
+                printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
+                if (collision.unitB) {
+                    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
+                }
+
                 that.units.forEach(u => u.move(collision.time));
                 time += collision.time;
 
                 //if (collision.unitA && collision.unitB) {
-                printErr('Before collision =>');
+                printErr('After Movement && Before Collision =>');
                 printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
-                //printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
-                //printErr('distance entre A et B à la collision : ' + aAfter.distance(bAfter));
-                //}
+                if (collision.unitB) {
+                    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
+                }
 
                 that.playCollision(collision);
 
                 //if (collision.unitA && collision.unitB) {
                 printErr('After collision =>');
                 printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
-                //    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
-                //}
+                if (collision.unitB) {
+                    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
+                }
 
                 collision = that.getNextCollision();
             }
