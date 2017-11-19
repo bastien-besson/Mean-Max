@@ -46,7 +46,7 @@ var GAME = {
 };
 
 GAME.Collision = function (t, a, b) {
-    this.time = Number(t).toFixed(2),
+    this.time = parseFloat(Number(t).toFixed(2)),
     this.unitA = a;
     this.unitB = b;
 };
@@ -67,7 +67,6 @@ GAME.Collision.prototype = {
     }
 }
 
-
 GAME.Unit = function (inputs) {
     this.unitId = parseInt(inputs[0]);
     this.typeId = parseInt(inputs[1]);
@@ -78,10 +77,10 @@ GAME.Unit = function (inputs) {
     this.speed = new Vector(parseFloat(inputs[7]), parseFloat(inputs[8]));
     this.extra = parseInt(inputs[9]);
     this.extra2 = parseInt(inputs[10]);
-    this.destination = new Vector();
-    this.target = null;
+    this.destination = new Vector(parseFloat(inputs[5]), parseFloat(inputs[6]));
+    this.target = new Vector();
     this.collision = [];
-    this.throttle = 300;
+    this.throttle = 150;
     this.angle = 0;
     this.water = 0;
 
@@ -106,25 +105,30 @@ GAME.Unit = function (inputs) {
 };
 
 GAME.Unit.prototype = {
-    move: function (time) {
+    thrust: function () {
+        if (!this.target) {
+            printErr('no thrust for : ' + this.name());
+            return;
+        }
+
         // Calculate angle to target
-        this.angle = this.target ? this.target.degreesTo(this.position) : this.speed.degreesTo(new  Vector());
+        this.angle = this.target.degreesTo(this.position);
 
         // Calculate new speed
-        this.speed.x += Math.cos(this.angle * Math.PI / 180) * this.throttle / this.mass * time;
-        this.speed.y += Math.sin(this.angle * Math.PI / 180) * this.throttle / this.mass * time;
+        this.speed.x += Math.cos(this.angle * Math.PI / 180) * this.throttle / this.mass;
+        this.speed.y += Math.sin(this.angle * Math.PI / 180) * this.throttle / this.mass;
+    },
 
+    move: function (time) {
         // Calculate new position
-        this.destination.x += Math.round(this.position.x + this.speed.x) * time;
-        this.destination.y += Math.round(this.position.y + this.speed.y) * time;
+        this.position.x += Math.round(this.speed.x * time);
+        this.position.y += Math.round(this.speed.y * time);
     },
 
     adjust: function () {
         // Update speed for next turn
         this.speed.x = Math.round(this.speed.x * (1 - this.friction));
         this.speed.y = Math.round(this.speed.y * (1 - this.friction));
-
-        this.angle = Math.round(this.angle);
     },
 
     findTarget: function (destroyer) {
@@ -137,11 +141,14 @@ GAME.Unit.prototype = {
                 var distanceRW = wreck ? this.position.distance(wreck.position) : Infinity;
                 var distanceRDT = distanceRD + distanceDT;
 
-                this.target = !wreck || distanceRDT < distanceRW ?
-                    destroyer.position : wreck.position;
+                this.target.x = !wreck || distanceRDT < distanceRW ?
+                    destroyer.position.x : wreck.position.x;
+                this.target.y = !wreck || distanceRDT < distanceRW ?
+                    destroyer.position.y : wreck.position.y;
                 break;
             case 1: // Destroyer
-                this.target = this.findClosest(GAME.UnitType.Tanker).position;
+                this.target.x = this.findClosest(GAME.UnitType.Tanker).position.x;
+                this.target.y = this.findClosest(GAME.UnitType.Tanker).position.y;
                 break;
         }
     },
@@ -157,15 +164,16 @@ GAME.Unit.prototype = {
 
     bounce: function (unit) {
         var impulseCoeff = 0.5;
-        var mcoeff = unit ? (this.mass + unit.mass) / (this.mass * unit.mass) : 1 / this.mass;
+        var mcoeff = unit ?
+            (this.mass + unit.mass) / (this.mass * unit.mass) : 1 / this.mass;
         var n = new Vector(
-            this.position.x - unit ? unit.position.x : 0,
-            this.position.y - unit ? unit.position.y : 0
+            this.position.x - (unit ? unit.position.x : 0),
+            this.position.y - (unit ? unit.position.y : 0)
             );
         var nLength2 = n.length2();
         var dv = new Vector(
-            this.speed.x - unit ? unit.speed.x : 0,
-            this.speed.y - unit ? unit.speed.y : 0
+            this.speed.x - (unit ? unit.speed.x : 0),
+            this.speed.y - (unit ? unit.speed.y : 0)
             );
         var product = (n.x * dv.x + n.y * dv.y) / (nLength2 * mcoeff);
         var f = new Vector(n.x * product, n.y * product);
@@ -173,6 +181,7 @@ GAME.Unit.prototype = {
         var m1c = 1 / this.mass;
         this.speed.x -= f.x * m1c;
         this.speed.y -= f.y * m1c;
+
 
         if (unit) {
             var m2c = 1 / unit.mass;
@@ -203,7 +212,7 @@ GAME.Unit.prototype = {
             unit.speed.y += f.y * m2c;
         }
 
-        var diff = (this.position.distance(unit ? unit : new Vector(0, 0)) - this.radius - unit ? unit.radius : GAME.mapRadius) / 2;
+        var diff = (this.position.distance(unit ? unit.position : new Vector(0, 0)) - this.radius - (unit ? unit.radius : GAME.mapRadius)) / 2;
 
         if ((unit && diff <= 0) || (!unit && diff >= 0)) {
             // Unit overlapping. Fix positions.
@@ -231,6 +240,12 @@ GAME.Unit.prototype = {
     },
 
     getMapCollision: function () {
+
+        // Tankers don't collide with the map
+        if (this.typeId == GAME.UnitType.Tanker) {
+            return new GAME.Collision(Infinity, this);
+        }
+
         // Check instant collision
         if (this.position.length() + this.radius >= GAME.mapRadius) {
             return new GAME.Collision(0, this);
@@ -281,7 +296,7 @@ GAME.Unit.prototype = {
 
         // Both units are motionless
         if (this.speed.length() + unit.speed.length() == 0) {
-            return null; //new GAME.Collision(Infinity, this, unit);
+            return null;
         }
 
         // Change referential to current unit
@@ -305,7 +320,7 @@ GAME.Unit.prototype = {
 
         // No collision : units are going in separate ways
         if (a <= 0) {
-            return null; //new GAME.Collision(Infinity, this, unit);
+            return null;
         }
 
         var b = 2 * (unitPosition.x * unitSpeed.x + unitPosition.y * unitSpeed.y);
@@ -313,26 +328,26 @@ GAME.Unit.prototype = {
         var delta = b * b - 4 * a * c;
 
         if (delta <= 0) {
-            return null; //new GAME.Collision(Infinity, this, unit);
+            return null;
         }
 
         var t = (-b - Math.sqrt(delta)) / (2 * a);
 
         if (t < 0) {
-            return null; //new GAME.Collision(Infinity, this, unit);
+            return null;
         }
 
         return new GAME.Collision(t, this, unit);
     },
 
     name: function () {
-        var name = Object.keys(GAME.UnitType).find(k => GAME.UnitType[k] == this.typeId) + this.playerId;
+        var name = Object.keys(GAME.UnitType).find(k => GAME.UnitType[k] == this.typeId) + '[' + this.unitId + ',' + this.playerId + ']';
         return name;
     },
 
     toString: function () {
-        var value = this.name() + ' :' + this.position + ' ' + this.destination + '\n';
-        //if (this.collision) {
+        var value = this.name() + ' \n    p:' + this.position + ' \n    d:' + this.destination + ' \n    s:' + this.speed + '\n';
+        //if (this.collision) {p
         //    value += 'Time: ' + this.collision.time + ' ';
         //    value += this.collision.unitB ?
         //        this.collision.unitB.name() + ' { pos:' + this.collision.unitB.position + ' }\n' : 'Map\n';
@@ -361,9 +376,8 @@ GAME.main = (function () {
         that.units.sort((unitA, unitB) => unitA.playerId - unitB.playerId);
 
         // Log unit infos
-        var reaper = that.units.find(u => u.typeId == GAME.UnitType.Reaper && u.playerId == 0);
-        printErr(reaper);
-
+        //var reaper = that.units.find(u => u.typeId == GAME.UnitType.Reaper && u.playerId == 0);
+        //printErr(reaper);
         //that.units.filter(u => u.typeId == 1).forEach(destroyer => printErr(destroyer));
         //that.units.filter(u => u.typeId == 3).forEach(tanker => printErr(tanker));
         //that.units.filter(u => u.typeId == 4).forEach(wreck => printErr(wreck));
@@ -384,36 +398,73 @@ GAME.main = (function () {
                 that.units.push(new GAME.Unit(readline().split(' ')));
             }
 
-            // Find user targets
+            // Declare our units
             var reaper = that.units.find(u => u.playerId == 0 && u.typeId == GAME.UnitType.Reaper);
             var destroyer = that.units.find(u => u.playerId == 0 && u.typeId == GAME.UnitType.Destroyer);
 
+
+            printErr('REAPER : ' + reaper.position);
+
+            // Find user targets
             reaper.findTarget(destroyer);
             destroyer.findTarget();
 
+            // Update speed
+            reaper.thrust();
+            destroyer.thrust();
+
+
             // Update collisions
             var collision = that.getNextCollision();
-            while (collision.time + time <= 1.0001) {
-                that.units.forEach(u => u.move(collision.time));
-                time += collision.time;
+
+            while (parseFloat(collision.time) + time < 1) {
+
+                var aBefore = new Vector(collision.unitA.position.x, collision.unitA.position.y);
+                var bBefore = new Vector(collision.unitB.position.x, collision.unitB.position.y);
+
+                printErr('NEXT COLLISION :' + collision.time + ' ' +
+                    (collision.unitA ? collision.unitA.name() : 'None') + ' ' +
+                    (collision.unitB ? collision.unitB.name() : 'Map'));
+
+                that.units.forEach(u => u.move(parseFloat(collision.time)));
+                time += parseFloat(collision.time);
+
+                var aAfter = new Vector(collision.unitA.position.x, collision.unitA.position.y);
+                var bAfter = new Vector(collision.unitB.position.x, collision.unitB.position.y);
+
+                //if (collision.unitA && collision.unitB) {
+                //    printErr('After movmt =>');
+                //    printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
+                //    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                //    printErr('distance entre A et B à la collision : ' + aAfter.distance(bAfter));
+                //}
 
                 that.playCollision(collision);
+
+                //if (collision.unitA && collision.unitB) {
+                //    printErr('After collision =>');
+                //    printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
+                //    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                //}
+
                 collision = that.getNextCollision();
             }
 
             // No more collision. Move units until the end of the round
             that.units.forEach(u => u.move(1 - time));
 
+            printErr('REAPER : ' + reaper.position);
+
             // Log infos
             that.log();
 
-            // print user units accelerations
+            // adjust units for next turn
+            that.units.forEach(u => u.adjust());
+
+            // Print user units accelerations
             print(reaper.target + ' ' + reaper.throttle);
             print(destroyer.target ? destroyer.target + ' ' + destroyer.throttle : 'WAIT');
             print('WAIT'); // Placeholder for the next leagues
-
-            // adjust units for next turn
-            that.units.forEach(u => u.adjust());
 
             // Increment loop index 
             that.loopIndex++;
@@ -421,27 +472,42 @@ GAME.main = (function () {
     };
 
     that.getNextCollision = function () {
-        var result = new GAME.Collision(1);
+        var result = [];
+        result.push(new GAME.Collision(1));
 
-        that.units.forEach(unit => {
-            var collision = unit.getMapCollision();
+        that.units
+            .filter(unit => unit.typeId != GAME.UnitType.Tanker)
+            .forEach(unit => {
+                var collision = unit.getMapCollision();
+                result.push(collision);
+                //if (collision.time < result.time) {
+                //    result = collision;
+                //}
 
-            if (collision.time < result.time) {
-                result = collision;
-            }
+                that.units
+                    .filter(other => other.unitId != unit.unitId)
+                    .forEach(other => {
+                        var collision = unit.getUnitCollision(other);
 
-            that.units
-                .filter(other => other.unitId)
-                .forEach(other => {
-                    var collision = unit.getUnitCollision(other);
+                        if (collision && !result.find(c => c.time == collision.time)) {
+                            result.push(collision);
+                        }
+                    });
+            });
 
-                    if (collision && collision.time < result.time) {
-                        result = collision;
-                    }
-                });
-        });
+        result = result
+            .filter(c => c)
+            .sort((a, b) => a.time - b.time);
 
-        return result;
+        //result.forEach((e, i) => {
+        //    if (i < 3) {
+        //        printErr('collision[' + i + '] ' +
+        //            (e.time + ' ' + (e.unitA ? e.unitA.name() : '')) +
+        //            '||' + ((e.unitB ? e.unitB.name() : 'Map')));
+        //    }
+        //});
+
+        return result[0];
     };
 
     that.playCollision = function (collision) {
