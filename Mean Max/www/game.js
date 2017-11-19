@@ -46,7 +46,7 @@ var GAME = {
 };
 
 GAME.Collision = function (t, a, b) {
-    this.time = parseFloat(Number(t).toFixed(2)),
+    this.time = parseFloat(t),
     this.unitA = a;
     this.unitB = b;
 };
@@ -119,6 +119,22 @@ GAME.Unit.prototype = {
         this.speed.y += Math.sin(this.angle * Math.PI / 180) * this.throttle / this.mass;
     },
 
+    moveTo: function (position, distance) {
+        printErr('moveTo');
+        var d = this.position.distance(position);
+
+        if (d < 0.0001) {
+            return;
+        }
+
+        var dx = position.x - this.position.x;
+        var dy = position.y - this.position.y;
+        var coef = distance / d;
+
+        this.position.x += dx * coef;
+        this.position.y += dy * coef;
+    },
+
     move: function (time) {
         // Calculate new position
         this.position.x += Math.round(this.speed.x * time);
@@ -163,6 +179,7 @@ GAME.Unit.prototype = {
     },
 
     bounce: function (unit) {
+        printErr('bounce');
         var impulseCoeff = 0.5;
         var mcoeff = unit ?
             (this.mass + unit.mass) / (this.mass * unit.mass) : 1 / this.mass;
@@ -214,10 +231,13 @@ GAME.Unit.prototype = {
 
         var diff = (this.position.distance(unit ? unit.position : new Vector(0, 0)) - this.radius - (unit ? unit.radius : GAME.mapRadius)) / 2;
 
-        if ((unit && diff <= 0) || (!unit && diff >= 0)) {
+        if (unit && diff <= 0) {
             // Unit overlapping. Fix positions.
-            // TODO
-            printErr('unit overlapping\n');
+            this.moveTo(unit.position, diff);
+            unit.moveTo(this.position, diff);
+        }
+        else if (!unit && diff >= 0) {
+            this.moveTo(new Vector(), diff);
         }
     },
 
@@ -248,6 +268,7 @@ GAME.Unit.prototype = {
 
         // Check instant collision
         if (this.position.length() + this.radius >= GAME.mapRadius) {
+            //printErr('INSTANT MAP COLLISION :' + this.position.length());
             return new GAME.Collision(0, this);
         }
 
@@ -285,6 +306,7 @@ GAME.Unit.prototype = {
             return new GAME.Collision(Infinity, this);
         }
 
+        //printErr('MAP COLLISION IN :' + t);
         return new GAME.Collision(t, this);
     },
 
@@ -333,7 +355,7 @@ GAME.Unit.prototype = {
 
         var t = (-b - Math.sqrt(delta)) / (2 * a);
 
-        if (t < 0) {
+        if (t <= 0.01) {
             return null;
         }
 
@@ -402,7 +424,7 @@ GAME.main = (function () {
             var reaper = that.units.find(u => u.playerId == 0 && u.typeId == GAME.UnitType.Reaper);
             var destroyer = that.units.find(u => u.playerId == 0 && u.typeId == GAME.UnitType.Destroyer);
 
-
+            // Print reaper current position
             printErr('REAPER : ' + reaper.position);
 
             // Find user targets
@@ -413,37 +435,30 @@ GAME.main = (function () {
             reaper.thrust();
             destroyer.thrust();
 
-
             // Update collisions
             var collision = that.getNextCollision();
 
-            while (parseFloat(collision.time) + time < 1) {
-
-                var aBefore = new Vector(collision.unitA.position.x, collision.unitA.position.y);
-                var bBefore = new Vector(collision.unitB.position.x, collision.unitB.position.y);
+            while (collision.time + time < 1) {
 
                 printErr('NEXT COLLISION :' + collision.time + ' ' +
                     (collision.unitA ? collision.unitA.name() : 'None') + ' ' +
                     (collision.unitB ? collision.unitB.name() : 'Map'));
 
-                that.units.forEach(u => u.move(parseFloat(collision.time)));
-                time += parseFloat(collision.time);
-
-                var aAfter = new Vector(collision.unitA.position.x, collision.unitA.position.y);
-                var bAfter = new Vector(collision.unitB.position.x, collision.unitB.position.y);
+                that.units.forEach(u => u.move(collision.time));
+                time += collision.time;
 
                 //if (collision.unitA && collision.unitB) {
-                //    printErr('After movmt =>');
-                //    printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
-                //    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
-                //    printErr('distance entre A et B à la collision : ' + aAfter.distance(bAfter));
+                printErr('Before collision =>');
+                printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
+                //printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                //printErr('distance entre A et B à la collision : ' + aAfter.distance(bAfter));
                 //}
 
                 that.playCollision(collision);
 
                 //if (collision.unitA && collision.unitB) {
-                //    printErr('After collision =>');
-                //    printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
+                printErr('After collision =>');
+                printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
                 //    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
                 //}
 
@@ -476,16 +491,16 @@ GAME.main = (function () {
         result.push(new GAME.Collision(1));
 
         that.units
-            .filter(unit => unit.typeId != GAME.UnitType.Tanker)
+            .filter(unit => unit.typeId != GAME.UnitType.Tanker && unit.typeId != GAME.UnitType.Wreck)
             .forEach(unit => {
                 var collision = unit.getMapCollision();
                 result.push(collision);
-                //if (collision.time < result.time) {
-                //    result = collision;
-                //}
 
                 that.units
-                    .filter(other => other.unitId != unit.unitId)
+                    .filter(other =>
+                        other.unitId != unit.unitId &&
+                        other.typeId != GAME.UnitType.Tanker &&
+                        other.typeId != GAME.UnitType.Wreck)
                     .forEach(other => {
                         var collision = unit.getUnitCollision(other);
 
@@ -498,14 +513,6 @@ GAME.main = (function () {
         result = result
             .filter(c => c)
             .sort((a, b) => a.time - b.time);
-
-        //result.forEach((e, i) => {
-        //    if (i < 3) {
-        //        printErr('collision[' + i + '] ' +
-        //            (e.time + ' ' + (e.unitA ? e.unitA.name() : '')) +
-        //            '||' + ((e.unitB ? e.unitB.name() : 'Map')));
-        //    }
-        //});
 
         return result[0];
     };
