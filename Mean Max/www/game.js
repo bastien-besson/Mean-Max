@@ -29,7 +29,7 @@ Vector.prototype = {
         return degrees;
     },
     toString: function () {
-        return this.x + ' ' + this.y;
+        return Math.round(this.x) + ' ' + Math.round(this.y);
     }
 }
 
@@ -107,7 +107,7 @@ GAME.Unit = function (inputs) {
 GAME.Unit.prototype = {
     thrust: function () {
         if (!this.target) {
-            printErr('no thrust for : ' + this.name());
+            //printErr('no thrust for : ' + this.name());
             return;
         }
 
@@ -120,7 +120,7 @@ GAME.Unit.prototype = {
     },
 
     moveTo: function (position, distance) {
-        printErr('moveTo');
+        //printErr('moveTo');
         var d = this.position.distance(position);
 
         if (d < 0.0001) {
@@ -179,7 +179,7 @@ GAME.Unit.prototype = {
     },
 
     bounce: function (unit) {
-        printErr('bounce');
+        //printErr('bounce');
         var impulseCoeff = 0.5;
         var mcoeff = unit ?
             (this.mass + unit.mass) / (this.mass * unit.mass) : 1 / this.mass;
@@ -229,15 +229,20 @@ GAME.Unit.prototype = {
             unit.speed.y += f.y * m2c;
         }
 
-        var diff = (this.position.distance(unit ? unit.position : new Vector(0, 0)) - this.radius - (unit ? unit.radius : GAME.mapRadius)) / 2;
+        var diff = unit ?
+            (this.position.distance(unit.position) - this.radius - unit.radius) / 2 :
+            this.position.length() + this.radius - GAME.mapRadius;
 
         if (unit && diff <= 0) {
             // Unit overlapping. Fix positions.
             this.moveTo(unit.position, diff - 0.001);
             unit.moveTo(this.position, diff - 0.001);
         }
-        else if (!unit && diff >= 0) {
-            this.moveTo(new Vector(), diff + 0.001);
+        else if (!unit) {
+            //printErr('DIFF VALUE FOR MAP COLLISION :' + diff);
+            if (diff >= 0) {
+                this.moveTo(new Vector(), diff + 0.001);
+            }
         }
     },
 
@@ -440,37 +445,37 @@ GAME.main = (function () {
 
             while (collision.time + time < 1) {
 
-                printErr('NEXT COLLISION :' + collision.time + ' ' +
-                    (collision.unitA ? collision.unitA.name() : 'None') + ' ' +
-                    (collision.unitB ? collision.unitB.name() : 'Map'));
+                //printErr('NEXT COLLISION :' + collision.time + ' ' +
+                //    (collision.unitA ? collision.unitA.name() : 'None') + ' ' +
+                //    (collision.unitB ? collision.unitB.name() : 'Map'));
 
-                printErr('Before Movement =>');
-                printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
-                if (collision.unitB) {
-                    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
-                    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
-                }
+                //printErr('Before Movement =>');
+                //printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed + ' ' + collision.unitA.position.length());
+                //if (collision.unitB) {
+                //    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                //    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
+                //}
 
                 that.units.forEach(u => u.move(collision.time));
                 time += collision.time;
 
                 //if (collision.unitA && collision.unitB) {
-                printErr('After Movement && Before Collision =>');
-                printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
-                if (collision.unitB) {
-                    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
-                    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
-                }
+                //printErr('After Movement && Before Collision =>');
+                //printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed + ' ' + collision.unitA.position.length());
+                //if (collision.unitB) {
+                //    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                //    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
+                //}
 
                 that.playCollision(collision);
 
                 //if (collision.unitA && collision.unitB) {
-                printErr('After collision =>');
-                printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed);
-                if (collision.unitB) {
-                    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
-                    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
-                }
+                //printErr('After collision =>');
+                //printErr('UNIT A: ' + collision.unitA.position + ' ' + collision.unitA.speed + ' ' + collision.unitA.position.length());
+                //if (collision.unitB) {
+                //    printErr('UNIT B: ' + collision.unitB.position + ' ' + collision.unitB.speed);
+                //    printErr('distance entre A et B : ' + collision.unitA.position.distance(collision.unitB.position));
+                //}
 
                 collision = that.getNextCollision();
             }
